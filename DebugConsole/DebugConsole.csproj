@@ -62,7 +62,7 @@
       <HintPath>..\packages\Mono.Cecil.Rocks.dll</HintPath>
       <Private>False</Private>
     </Reference>
-    <Reference Include="Mono.CSharp, Version=2.0.0.0, Culture=neutral, PublicKeyToken=0738eb9f132ed756">
+    <Reference Include="Mono.CSharp, Version=4.0.0.0, Culture=neutral, PublicKeyToken=null">
       <HintPath>lib\Mono.CSharp.dll</HintPath>
     </Reference>
     <Reference Include="Steamworks.NET">
