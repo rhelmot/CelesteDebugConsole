@@ -52,12 +52,14 @@ namespace Celeste.Mod.DebugConsole {
             var field = typeof(Monocle.Commands).GetField("currentText", BindingFlags.NonPublic | BindingFlags.Instance);
             string text = (string) field.GetValue(Engine.Commands);
             field.SetValue(Engine.Commands, "");
+            typeof(Monocle.Commands).GetField("charIndex", BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(Engine.Commands, 0);
             return text;
         }
 
         public void SetText(string value) {
             var field = typeof(Monocle.Commands).GetField("currentText", BindingFlags.NonPublic | BindingFlags.Instance);
             field.SetValue(Engine.Commands, value);
+            typeof(Monocle.Commands).GetField("charIndex", BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(Engine.Commands, value.Length);
         }
 
         public void HandleDebugKeystroke(On.Monocle.Commands.orig_HandleKey orig, Monocle.Commands self, Keys key) {
@@ -93,6 +95,9 @@ namespace Celeste.Mod.DebugConsole {
                         var dir = key == Keys.Up ? -1 : 1;
                         this.HistoryIndex = Calc.Clamp(this.HistoryIndex + dir, 0, this.History.Count);
                         this.SetText(this.HistoryIndex == this.History.Count ? "" : this.History[this.HistoryIndex]);
+                        return;
+                    case Keys.Tab:
+                        // TODO
                         return;
                 }
             }
@@ -131,7 +136,14 @@ namespace Celeste.Mod.DebugConsole {
         public void HandleLine(string line) {
             Engine.Commands.Log(line, Color.Aqua);
             try {
-                Engine.Commands.Log(this.Eval.Evaluate(line));
+                var obj = this.Eval.Evaluate(line);
+                if (obj == null) {
+                    Engine.Commands.Log("null");
+                } else if (obj is string objs) {
+                    Engine.Commands.Log('"' + objs.Replace("\\", "\\\\").Replace("\"", "\\\"") + '"');
+                } else {
+                    Engine.Commands.Log(obj.ToString());
+                }
             } catch (Exception e) {
                 //Engine.Commands.Log($"{e.GetType().Name}: {e.Message}", Color.Red);
                 if (e.Message != "The expression failed to resolve") {
