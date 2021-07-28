@@ -138,7 +138,7 @@ namespace Celeste.Mod.DebugConsole {
             this.Eval.Run("using System.Collections;");
             this.Eval.Run("using System.Collections.Generic;");
             this.Eval.Run("using Celeste.Mod.DebugConsole;");
-            this.Eval.Run("Action<object> log = DebugConsole.Log;");
+            this.Eval.Run("Action<object> log = (o) => DebugConsole.Log(o);");
             this.ErrPrinter.Intercept = false;
         }
         public void HandleLine(string line) {
