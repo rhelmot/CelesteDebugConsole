@@ -8,6 +8,7 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Mono.CSharp;
 using Monocle;
+using System.Linq;
 using MonoMod.Cil;
 
 namespace Celeste.Mod.DebugConsole {
@@ -30,7 +31,7 @@ namespace Celeste.Mod.DebugConsole {
         public DebugConsole() {
             Instance = this;
         }
-        
+
         public override void LoadContent(bool firstLoad) {
             this.Setup();
         }
@@ -119,7 +120,10 @@ namespace Celeste.Mod.DebugConsole {
             this.ErrPrinter = new DebugWriter();
             var ctx = new CompilerContext(new CompilerSettings(), new StreamReportPrinter(this.ErrPrinter));
             this.Eval = new Evaluator(ctx);
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies()) { 
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies()) {
+                if (asm.GetName().Name == "System.Core") {
+                    continue;
+                }
                 this.Eval.ReferenceAssembly(asm);
             }
 
@@ -155,10 +159,10 @@ namespace Celeste.Mod.DebugConsole {
         public void HandleCancel() {
         }
     }
-            
+
     public class DebugWriter : TextWriter {
         public override Encoding Encoding { get; }
-        
+
         private List<char> Buffer = new List<char>();
         public Color Color = Color.Yellow;
         public bool Intercept = false;
