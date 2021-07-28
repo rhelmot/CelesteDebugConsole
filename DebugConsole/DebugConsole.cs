@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Text;
 using FMOD.Studio;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Mono.CSharp;
 using Monocle;
@@ -19,6 +20,7 @@ namespace Celeste.Mod.DebugConsole {
         public List<string> History = new List<string>();
         public int HistoryIndex = 0;
         public string SavedLine = "";
+        public List<Tuple<string, Func<object>>> Watches = new List<Tuple<string, Func<object>>>();
 
         [Command("cs", "Start C# interactive session")]
         public static void StartCapture() {
@@ -38,11 +40,13 @@ namespace Celeste.Mod.DebugConsole {
         public override void Load() {
             On.Monocle.Commands.HandleKey += this.HandleDebugKeystroke;
             IL.Monocle.Commands.Render += this.CustomPrompt;
+            On.Monocle.Engine.RenderCore += this.RenderHook;
         }
 
         public override void Unload() {
             On.Monocle.Commands.HandleKey -= this.HandleDebugKeystroke;
             IL.Monocle.Commands.Render -= this.CustomPrompt;
+            On.Monocle.Engine.RenderCore -= this.RenderHook;
         }
 
         public override void CreateModMenuSection(TextMenu menu, bool inGame, EventInstance snapshot) {
@@ -110,6 +114,37 @@ namespace Celeste.Mod.DebugConsole {
                 cursor.EmitDelegate<Func<string, string>>(oldString => this.CaptureInput ? this.Prompt : oldString);
             }
         }
+
+        private void RenderHook(On.Monocle.Engine.orig_RenderCore orig, Engine self) {
+            orig(self);
+
+            Draw.SpriteBatch.Begin(
+                SpriteSortMode.Deferred,
+                BlendState.AlphaBlend,
+                SamplerState.LinearClamp,
+                DepthStencilState.Default,
+                RasterizerState.CullNone,
+                null,
+                Engine.ScreenMatrix);
+
+            var position = new Vector2(1850, 30);
+
+            foreach (var watch in Instance.Watches) {
+                string txt;
+                try {
+                    txt = Fmt(watch.Item2());
+                } catch (Exception e) {
+                    txt = "#ERROR";
+                }
+
+                txt = $"{watch.Item1}: {txt}";
+
+                ActiveFont.DrawOutline(txt, position, new Vector2(1, 0), Vector2.One * 0.5f, Color.White, 2f, Color.Black);
+                position += Vector2.UnitY * 40;
+            }
+
+            Draw.SpriteBatch.End();
+        }
         #endregion
 
         public Evaluator Eval;
@@ -139,6 +174,8 @@ namespace Celeste.Mod.DebugConsole {
             this.Eval.Run("using System.Collections.Generic;");
             this.Eval.Run("using Celeste.Mod.DebugConsole;");
             this.Eval.Run("Action<object> log = (o) => DebugConsole.Log(o);");
+            this.Eval.Run("Action<string, Func<object>> watch = (name, func) => DebugConsole.Watch(name, func);");
+            this.Eval.Run("Action<string> unwatch = (name) => DebugConsole.Unwatch(name);");
             this.ErrPrinter.Intercept = false;
         }
         public void HandleLine(string line) {
@@ -157,7 +194,7 @@ namespace Celeste.Mod.DebugConsole {
         public void HandleCancel() {
         }
 
-        public static void Log(params object[] objs) {
+        public static string Fmt(params object[] objs) {
             var builder = new StringBuilder();
             var first = true;
             foreach (var obj in objs) {
@@ -174,7 +211,35 @@ namespace Celeste.Mod.DebugConsole {
                 }
             }
 
-            Engine.Commands.Log(builder.ToString());
+            return builder.ToString();
+        }
+
+        public static void Log(params object[] objs) {
+            Engine.Commands.Log(Fmt(objs));
+        }
+
+        public static void Watch(string name, Func<object> evaluator) {
+            foreach (var watch in Instance.Watches) {
+                if (watch.Item1 == name) {
+                    throw new Exception("Name is already taken");
+                }
+            }
+
+            Instance.Watches.Add(Tuple.Create(name, evaluator));
+        }
+
+        public static void Unwatch(string name) {
+            var idx = 0;
+            foreach (var watch in Instance.Watches) {
+                if (watch.Item1 == name) {
+                    Instance.Watches.RemoveAt(idx);
+                    return;
+                }
+
+                idx++;
+            }
+
+            throw new Exception("No such watch");
         }
     }
 
