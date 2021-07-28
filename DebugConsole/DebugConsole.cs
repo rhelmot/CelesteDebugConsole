@@ -8,7 +8,6 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Mono.CSharp;
 using Monocle;
-using System.Linq;
 using MonoMod.Cil;
 
 namespace Celeste.Mod.DebugConsole {
@@ -121,8 +120,11 @@ namespace Celeste.Mod.DebugConsole {
             var ctx = new CompilerContext(new CompilerSettings(), new StreamReportPrinter(this.ErrPrinter));
             this.Eval = new Evaluator(ctx);
             foreach (var asm in AppDomain.CurrentDomain.GetAssemblies()) {
-                if (asm.GetName().Name == "System.Core") {
-                    continue;
+                var name = asm.GetName().Name;
+                switch (name) {
+                    case "System.Core":
+                    case "mscorlib":
+                        continue;
                 }
                 this.Eval.ReferenceAssembly(asm);
             }
@@ -135,19 +137,15 @@ namespace Celeste.Mod.DebugConsole {
             this.Eval.Run("using System;");
             this.Eval.Run("using System.Collections;");
             this.Eval.Run("using System.Collections.Generic;");
+            this.Eval.Run("using Celeste.Mod.DebugConsole;");
+            this.Eval.Run("Action<object> log = DebugConsole.Log;");
             this.ErrPrinter.Intercept = false;
         }
         public void HandleLine(string line) {
             Engine.Commands.Log(line, Color.Aqua);
             try {
                 var obj = this.Eval.Evaluate(line);
-                if (obj == null) {
-                    Engine.Commands.Log("null");
-                } else if (obj is string objs) {
-                    Engine.Commands.Log('"' + objs.Replace("\\", "\\\\").Replace("\"", "\\\"") + '"');
-                } else {
-                    Engine.Commands.Log(obj.ToString());
-                }
+                Log(obj);
             } catch (Exception e) {
                 //Engine.Commands.Log($"{e.GetType().Name}: {e.Message}", Color.Red);
                 if (e.Message != "The expression failed to resolve") {
@@ -157,6 +155,26 @@ namespace Celeste.Mod.DebugConsole {
         }
 
         public void HandleCancel() {
+        }
+
+        public static void Log(params object[] objs) {
+            var builder = new StringBuilder();
+            var first = true;
+            foreach (var obj in objs) {
+                if (!first) {
+                    builder.Append(" ");
+                }
+                first = false;
+                if (obj == null) {
+                    builder.Append("null");
+                } else if (obj is string objStr) {
+                    builder.Append('"' + objStr.Replace("\\", "\\\\").Replace("\"", "\\\"") + '"');
+                } else {
+                    builder.Append(obj);
+                }
+            }
+
+            Engine.Commands.Log(builder.ToString());
         }
     }
 
@@ -176,6 +194,16 @@ namespace Celeste.Mod.DebugConsole {
                 this.Buffer.Clear();
             } else {
                 this.Buffer.Add(value);
+            }
+        }
+    }
+
+    public static class Extensions {
+        public static void LogAll<T>(this IEnumerable<T> self) {
+            var idx = 0;
+            foreach (var item in self) {
+                DebugConsole.Log(idx, item);
+                idx++;
             }
         }
     }
