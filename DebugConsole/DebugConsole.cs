@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Text;
+using System.Linq;
 using FMOD.Studio;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -52,18 +53,26 @@ namespace Celeste.Mod.DebugConsole {
         public override void CreateModMenuSection(TextMenu menu, bool inGame, EventInstance snapshot) {
         }
 
+        public int GetIndex() {
+            return (int)typeof(Monocle.Commands).GetField("charIndex", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(Engine.Commands);
+        }
+
+        public void SetIndex(int idx) {
+            typeof(Monocle.Commands).GetField("charIndex", BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(Engine.Commands, idx);
+        }
+
         public string PopText() {
             var field = typeof(Monocle.Commands).GetField("currentText", BindingFlags.NonPublic | BindingFlags.Instance);
             string text = (string) field.GetValue(Engine.Commands);
             field.SetValue(Engine.Commands, "");
-            typeof(Monocle.Commands).GetField("charIndex", BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(Engine.Commands, 0);
+            this.SetIndex(0);
             return text;
         }
 
         public void SetText(string value) {
             var field = typeof(Monocle.Commands).GetField("currentText", BindingFlags.NonPublic | BindingFlags.Instance);
             field.SetValue(Engine.Commands, value);
-            typeof(Monocle.Commands).GetField("charIndex", BindingFlags.NonPublic | BindingFlags.Instance)?.SetValue(Engine.Commands, value.Length);
+            this.SetIndex(value.Length);
         }
 
         public void HandleDebugKeystroke(On.Monocle.Commands.orig_HandleKey orig, Monocle.Commands self, Keys key) {
@@ -101,7 +110,12 @@ namespace Celeste.Mod.DebugConsole {
                         this.SetText(this.HistoryIndex == this.History.Count ? "" : this.History[this.HistoryIndex]);
                         return;
                     case Keys.Tab:
-                        // TODO
+                        var idx = this.GetIndex();
+                        var txt = this.PopText();
+                        var prefix = txt.Substring(0, idx);
+                        var suffix = txt.Substring(idx);
+                        var result = this.HandleTab(prefix);
+                        this.SetText(result + suffix);
                         return;
                 }
             }
@@ -133,7 +147,7 @@ namespace Celeste.Mod.DebugConsole {
                 string txt;
                 try {
                     txt = Fmt(watch.Item2());
-                } catch (Exception e) {
+                } catch (Exception) {
                     txt = "#ERROR";
                 }
 
@@ -157,6 +171,7 @@ namespace Celeste.Mod.DebugConsole {
             foreach (var asm in AppDomain.CurrentDomain.GetAssemblies()) {
                 var name = asm.GetName().Name;
                 switch (name) {
+                    case "System":
                     case "System.Core":
                     case "mscorlib":
                         continue;
@@ -167,12 +182,13 @@ namespace Celeste.Mod.DebugConsole {
             this.ErrPrinter.Intercept = true;
             this.Eval.Run("using Celeste;");
             this.Eval.Run("using Monocle;");
+            this.Eval.Run("using Celeste.Mod.DebugConsole;");
             this.Eval.Run("using Microsoft.Xna.Framework;");
             this.Eval.Run("using Microsoft.Xna.Framework.Input;");
             this.Eval.Run("using System;");
             this.Eval.Run("using System.Collections;");
             this.Eval.Run("using System.Collections.Generic;");
-            this.Eval.Run("using Celeste.Mod.DebugConsole;");
+            this.Eval.Run("using System.Linq;");
             this.Eval.Run("Action<object> log = (o) => DebugConsole.Log(o);");
             this.Eval.Run("Action<string, Func<object>> watch = (name, func) => DebugConsole.Watch(name, func);");
             this.Eval.Run("Action<string> unwatch = (name) => DebugConsole.Unwatch(name);");
@@ -189,6 +205,25 @@ namespace Celeste.Mod.DebugConsole {
                     Engine.Commands.Log(e.Message, Color.Yellow);
                 }
             }
+        }
+
+        private string HandleTab(string line) {
+            var possibilities = this.Eval.GetCompletions(line, out var prefix);
+            if (possibilities == null) {
+                return line;
+            }
+
+            string bestPrefix = "";
+            if (possibilities.Length != 0) {
+                bestPrefix = new string(
+                    possibilities.First().Substring(0, possibilities.Min(s => s.Length))
+                        .TakeWhile((c, i) => possibilities.All(s => s[i] == c)).ToArray());
+
+                if (bestPrefix == "") {
+                    Engine.Commands.Log("==> " + string.Join(" ", possibilities.Select(x => prefix + x)));
+                }
+            }
+            return line + bestPrefix;
         }
 
         public void HandleCancel() {
