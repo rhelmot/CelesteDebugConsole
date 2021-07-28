@@ -205,7 +205,12 @@ namespace Celeste.Mod.DebugConsole {
                 if (obj == null) {
                     builder.Append("null");
                 } else if (obj is string objStr) {
-                    builder.Append('"' + objStr.Replace("\\", "\\\\").Replace("\"", "\\\"") + '"');
+                    builder.Append('"' + objStr
+                                           .Replace("\\", "\\\\")
+                                           .Replace("\"", "\\\"")
+                                           .Replace("\n", "\\n")
+                                           .Replace("\t", "\\t")
+                                       + '"');
                 } else {
                     builder.Append(obj);
                 }
