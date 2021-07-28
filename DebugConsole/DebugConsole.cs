@@ -116,6 +116,7 @@ namespace Celeste.Mod.DebugConsole {
                         var suffix = txt.Substring(idx);
                         var result = this.HandleTab(prefix);
                         this.SetText(result + suffix);
+                        this.SetIndex(result.Length);
                         return;
                 }
             }
