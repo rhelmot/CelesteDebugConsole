@@ -23,11 +23,16 @@ namespace Celeste.Mod.DebugConsole {
         public string SavedLine = "";
         public List<Tuple<string, Func<object>>> Watches = new List<Tuple<string, Func<object>>>();
 
-        [Command("cs", "Start C# interactive session")]
+        [Command("cs", "Start C# interactive session (Debug Console)")]
         public static void StartCapture() {
             Instance.CaptureInput = true;
             Instance.SetText(Instance.SavedLine);
             Engine.Commands.Log("Welcome to the C# interactive prompt. Ctrl-C to clear line and Ctrl-D to exit.", Color.GreenYellow);
+        }
+
+        [Command("evalcs", "Evaluate C# codes (Debug Console)")]
+        public static void EvalCsCommand(string codes) {
+            Instance.HandleLine(codes);
         }
 
         public DebugConsole() {
@@ -195,6 +200,7 @@ namespace Celeste.Mod.DebugConsole {
             this.Eval.Run("Action<string> unwatch = (name) => DebugConsole.Unwatch(name);");
             this.ErrPrinter.Intercept = false;
         }
+
         public void HandleLine(string line) {
             Engine.Commands.Log(line, Color.Aqua);
             try {
