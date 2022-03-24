@@ -4,6 +4,7 @@ using System.IO;
 using System.Reflection;
 using System.Text;
 using System.Linq;
+using System.Text.RegularExpressions;
 using FMOD.Studio;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -15,6 +16,9 @@ using MonoMod.Cil;
 namespace Celeste.Mod.DebugConsole {
     public class DebugConsole : EverestModule {
         #region everest setup
+        private static FieldInfo CommandHistoryFieldInfo =
+            typeof(Monocle.Commands).GetField("commandHistory", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly Regex SeparatorRegex = new Regex(@"^[ |,]+", RegexOptions.Compiled);
         public static DebugConsole Instance;
         public bool CaptureInput = false;
         public string Prompt = "C#>";
@@ -47,12 +51,14 @@ namespace Celeste.Mod.DebugConsole {
             On.Monocle.Commands.HandleKey += this.HandleDebugKeystroke;
             IL.Monocle.Commands.Render += this.CustomPrompt;
             On.Monocle.Engine.RenderCore += this.RenderHook;
+            On.Monocle.Commands.ExecuteCommand += this.CorrectArgs;
         }
 
         public override void Unload() {
             On.Monocle.Commands.HandleKey -= this.HandleDebugKeystroke;
             IL.Monocle.Commands.Render -= this.CustomPrompt;
             On.Monocle.Engine.RenderCore -= this.RenderHook;
+            On.Monocle.Commands.ExecuteCommand -= this.CorrectArgs;
         }
 
         public override void CreateModMenuSection(TextMenu menu, bool inGame, EventInstance snapshot) {
@@ -164,6 +170,16 @@ namespace Celeste.Mod.DebugConsole {
             }
 
             Draw.SpriteBatch.End();
+        }
+
+        private void CorrectArgs(On.Monocle.Commands.orig_ExecuteCommand orig, Monocle.Commands self, string command, string[] args) {
+            if (command == "evalcs") {
+                List<string> commandHistory = CommandHistoryFieldInfo.GetValue(self) as List<string>;
+                if (commandHistory?.FirstOrDefault()?.StartsWith("evalcs") == true) {
+                    args = new[] {SeparatorRegex.Replace(commandHistory[0].Substring(6), "")};
+                }
+            }
+            orig(self, command, args);
         }
         #endregion
 
