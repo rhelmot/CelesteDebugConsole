@@ -4,6 +4,7 @@ using System.IO;
 using System.Reflection;
 using System.Text;
 using System.Linq;
+using System.Text.RegularExpressions;
 using FMOD.Studio;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -15,6 +16,9 @@ using MonoMod.Cil;
 namespace Celeste.Mod.DebugConsole {
     public class DebugConsole : EverestModule {
         #region everest setup
+        private static readonly FieldInfo CommandHistoryFieldInfo =
+            typeof(Monocle.Commands).GetField("commandHistory", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly Regex SeparatorRegex = new Regex(@"^evalcs[ |,]+", RegexOptions.Compiled);
         public static DebugConsole Instance;
         public bool CaptureInput = false;
         public string Prompt = "C#>";
@@ -23,11 +27,20 @@ namespace Celeste.Mod.DebugConsole {
         public string SavedLine = "";
         public List<Tuple<string, Func<object>>> Watches = new List<Tuple<string, Func<object>>>();
 
-        [Command("cs", "Start C# interactive session")]
+        [Command("cs", "Start C# interactive session (Debug Console)")]
         public static void StartCapture() {
             Instance.CaptureInput = true;
             Instance.SetText(Instance.SavedLine);
             Engine.Commands.Log("Welcome to the C# interactive prompt. Ctrl-C to clear line and Ctrl-D to exit.", Color.GreenYellow);
+        }
+
+        [Command("evalcs", "Evaluate C# codes (Debug Console)")]
+        public static void EvalCsCommand(string codes) {
+            List<string> commandHistory = CommandHistoryFieldInfo.GetValue(Engine.Commands) as List<string>;
+            if (commandHistory?.FirstOrDefault()?.StartsWith("evalcs") == true) {
+                codes = SeparatorRegex.Replace(commandHistory[0], "");
+            }
+            Instance.HandleLine(codes);
         }
 
         public DebugConsole() {
@@ -160,6 +173,7 @@ namespace Celeste.Mod.DebugConsole {
 
             Draw.SpriteBatch.End();
         }
+
         #endregion
 
         public Evaluator Eval;
@@ -195,6 +209,7 @@ namespace Celeste.Mod.DebugConsole {
             this.Eval.Run("Action<string> unwatch = (name) => DebugConsole.Unwatch(name);");
             this.ErrPrinter.Intercept = false;
         }
+
         public void HandleLine(string line) {
             Engine.Commands.Log(line, Color.Aqua);
             try {
