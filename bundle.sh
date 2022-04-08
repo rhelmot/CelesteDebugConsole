@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-msbuild
+dotnet build
 VERSION=$(cat DebugConsole/everest.yaml | grep '^  Version' | cut -d' ' -f 4)
 FILENAME=dist/DebugConsole_${VERSION}${2}.zip
 rm -f $FILENAME
