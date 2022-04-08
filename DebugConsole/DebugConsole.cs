@@ -18,7 +18,7 @@ namespace Celeste.Mod.DebugConsole {
         #region everest setup
         private static readonly FieldInfo CommandHistoryFieldInfo =
             typeof(Monocle.Commands).GetField("commandHistory", BindingFlags.Instance | BindingFlags.NonPublic);
-        private static readonly Regex SeparatorRegex = new Regex(@"^evalcs[ |,]+", RegexOptions.Compiled);
+        private static readonly Regex SeparatorRegex = new Regex(@"^evalcs[ |,]+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
         public static DebugConsole Instance;
         public bool CaptureInput = false;
         public string Prompt = "C#>";
@@ -37,7 +37,7 @@ namespace Celeste.Mod.DebugConsole {
         [Command("evalcs", "Evaluate C# codes (Debug Console)")]
         public static void EvalCsCommand(string codes) {
             List<string> commandHistory = CommandHistoryFieldInfo.GetValue(Engine.Commands) as List<string>;
-            if (commandHistory?.FirstOrDefault()?.StartsWith("evalcs") == true) {
+            if (commandHistory?.FirstOrDefault()?.StartsWith("evalcs", StringComparison.InvariantCultureIgnoreCase) == true) {
                 codes = SeparatorRegex.Replace(commandHistory[0], "");
             }
             Instance.HandleLine(codes);
