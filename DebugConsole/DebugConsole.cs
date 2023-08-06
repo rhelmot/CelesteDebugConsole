@@ -5,20 +5,24 @@ using System.Reflection;
 using System.Text;
 using System.Linq;
 using System.Text.RegularExpressions;
-using FMOD.Studio;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+using Mono.Cecil.Cil;
 using Mono.CSharp;
 using Monocle;
 using MonoMod.Cil;
+using MonoMod.RuntimeDetour;
 
 namespace Celeste.Mod.DebugConsole {
     public class DebugConsole : EverestModule {
         #region everest setup
         private static readonly FieldInfo CommandHistoryFieldInfo =
             typeof(Monocle.Commands).GetField("commandHistory", BindingFlags.Instance | BindingFlags.NonPublic);
-        private static readonly Regex SeparatorRegex = new Regex(@"^evalcs[ |,]+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        private static readonly FieldInfo DebugRClogFieldInfo =
+            typeof(Monocle.Commands).GetField("debugRClog", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly Regex EvalcsWithSeparatorRegex = new Regex(@"^evalcs[ |,]+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        private static ILHook debugRcHook;
         public static DebugConsole Instance;
         public bool CaptureInput = false;
         public string Prompt = "C#>";
@@ -36,9 +40,10 @@ namespace Celeste.Mod.DebugConsole {
 
         [Command("evalcs", "Evaluate C# codes (Debug Console)")]
         public static void EvalCsCommand(string codes) {
-            List<string> commandHistory = CommandHistoryFieldInfo.GetValue(Engine.Commands) as List<string>;
-            if (commandHistory?.FirstOrDefault()?.StartsWith("evalcs", StringComparison.InvariantCultureIgnoreCase) == true) {
-                codes = SeparatorRegex.Replace(commandHistory[0], "");
+            List<string> commandHistory = (List<string>) CommandHistoryFieldInfo.GetValue(Engine.Commands);
+            if (DebugRClogFieldInfo?.GetValue(Engine.Commands) == null
+                && commandHistory.FirstOrDefault()?.StartsWith("evalcs", StringComparison.InvariantCultureIgnoreCase) == true) {
+                codes = EvalcsWithSeparatorRegex.Replace(commandHistory[0], "");
             }
             Instance.HandleLine(codes);
         }
@@ -55,15 +60,14 @@ namespace Celeste.Mod.DebugConsole {
             On.Monocle.Commands.HandleKey += this.HandleDebugKeystroke;
             IL.Monocle.Commands.Render += this.CustomPrompt;
             On.Monocle.Engine.RenderCore += this.RenderHook;
+            this.HookEverestDebugRc();
         }
 
         public override void Unload() {
             On.Monocle.Commands.HandleKey -= this.HandleDebugKeystroke;
             IL.Monocle.Commands.Render -= this.CustomPrompt;
             On.Monocle.Engine.RenderCore -= this.RenderHook;
-        }
-
-        public override void CreateModMenuSection(TextMenu menu, bool inGame, EventInstance snapshot) {
+            debugRcHook?.Dispose();
         }
 
         public int GetIndex() {
@@ -172,6 +176,40 @@ namespace Celeste.Mod.DebugConsole {
             }
 
             Draw.SpriteBatch.End();
+        }
+
+        private void HookEverestDebugRc() {
+            var methods = typeof(Everest.DebugRC).GetNestedType("<>c", BindingFlags.NonPublic)
+                .GetMethods(BindingFlags.Instance | BindingFlags.NonPublic);
+            foreach (var method in methods) {
+                var methodBody = method.GetMethodBody();
+                if (methodBody == null) {
+                    continue;
+                }
+
+                foreach (var localVariable in methodBody.LocalVariables) {
+                    if (localVariable.LocalType?.FullName != "Monocle.Commands+CommandData") {
+                        continue;
+                    }
+
+                    debugRcHook = new ILHook(method, context => {
+                        // insert codes after "rawCommand.Split(new[] {' ', ','}, StringSplitOptions.RemoveEmptyEntries);"
+                        var cursor = new ILCursor(context);
+                        if (cursor.TryGotoNext(MoveType.After, instr => instr.MatchCallvirt<string>("Split"))) {
+                            cursor.Emit(OpCodes.Ldloc_0).EmitDelegate<Func<string[], string, string[]>>(
+                                (commandAndArgs, rawCommand) => {
+                                    if (commandAndArgs[0].ToLower() == "evalcs" && commandAndArgs.Length >= 2) {
+                                        return new[] {"evalcs", EvalcsWithSeparatorRegex.Replace(rawCommand, "")};
+                                    }
+
+                                    return commandAndArgs;
+                                });
+                        }
+                    });
+
+                    return;
+                }
+            }
         }
 
         #endregion
